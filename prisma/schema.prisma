@@ -1,0 +1,388 @@
+// JunkShop Prisma schema
+// Datasource: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────── Admin ─────────────────────────────
+
+// Platform-level Super Admin. Manages Entities/Companies and their main users.
+model SuperAdmin {
+  id           Int      @id @default(autoincrement())
+  name         String
+  email        String   @unique
+  phone        String   @unique
+  passwordHash String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("super_admins")
+}
+
+// ──────────────────────── Entity / Company ───────────────────────
+
+model Entity {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique // short unique code for the entity
+  name        String
+  description String?
+  address     String?
+  phone1      String?
+  phone2      String?
+  ownerName   String?
+  logo        String? // URL or stored path
+  email       String?  @unique
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  shops      Shop[]
+  users      SubUser[]
+  products   Product[]
+  categories Category[]
+  customers  Customer[]
+  suppliers  Supplier[]
+  units      Unit[]
+  banks      Bank[]
+  sales      Sale[]
+  purchases  Purchase[]
+  stocks     Stock[]
+  stockTxns  StockTransaction[]
+
+  @@map("entities")
+}
+
+// ───────────────────────────── Shop ──────────────────────────────
+
+model Shop {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique // shop code
+  entityId    Int
+  name        String
+  description String?
+  address     String?
+  phone1      String?
+  phone2      String?
+  inchargeName String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  entity    Entity             @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  stocks    Stock[]
+  sales     Sale[]
+  purchases Purchase[]
+  stockTxns StockTransaction[]
+
+  @@index([entityId])
+  @@map("shops")
+}
+
+// ─────────────────────────── Sub User ────────────────────────────
+
+model SubUser {
+  id          Int      @id @default(autoincrement())
+  entityId    Int
+  username    String // login name, unique within an entity
+  name        String?
+  passwordHash String
+  description String?
+  phone       String?
+  isMain      Boolean  @default(false) // the entity's main/admin account
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  entity      Entity            @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  permissions UserPermission[]
+
+  @@unique([entityId, username])
+  @@index([entityId])
+  @@map("sub_users")
+}
+
+// Per-user permission grants. A permission is identified by a string key
+// (see src/constants/permissions.ts).
+model UserPermission {
+  id         Int      @id @default(autoincrement())
+  subUserId  Int
+  permission String
+  createdAt  DateTime @default(now())
+
+  subUser SubUser @relation(fields: [subUserId], references: [id], onDelete: Cascade)
+
+  @@unique([subUserId, permission])
+  @@index([subUserId])
+  @@map("user_permissions")
+}
+
+// ──────────────────────── Product / Category ─────────────────────
+
+model Category {
+  id           Int      @id @default(autoincrement())
+  entityId     Int
+  name         String
+  description  String?
+  // POS scrap-buying fields (used by scrap-pos-app)
+  pricingType  String   @default("weight") @map("pricing_type")
+  pricePerUnit Decimal  @default(0) @map("price_per_unit") @db.Decimal(14, 2)
+  unit         String   @default("kg")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  entity   Entity    @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@unique([entityId, name])
+  @@index([entityId])
+  @@map("categories")
+}
+
+model Product {
+  id            Int      @id @default(autoincrement())
+  entityId      Int
+  categoryId    Int?
+  unitId        Int?
+  code          String?
+  name          String
+  description   String?
+  purchasePrice Decimal  @default(0) @db.Decimal(14, 2)
+  salePrice     Decimal  @default(0) @db.Decimal(14, 2)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  entity     Entity             @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  category   Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  unit       Unit?              @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  stocks     Stock[]
+  stockTxns  StockTransaction[]
+  saleItems  SaleItem[]
+  purchaseItems PurchaseItem[]
+
+  @@unique([entityId, code])
+  @@index([entityId])
+  @@index([categoryId])
+  @@map("products")
+}
+
+// ───────────────────────────── Stock ─────────────────────────────
+
+// Current on-hand balance of a product at a given shop.
+model Stock {
+  id        Int      @id @default(autoincrement())
+  entityId  Int
+  shopId    Int
+  productId Int
+  quantity  Decimal  @default(0) @db.Decimal(14, 2)
+  updatedAt DateTime @updatedAt
+
+  entity  Entity  @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  shop    Shop    @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, productId])
+  @@index([entityId])
+  @@index([productId])
+  @@map("stocks")
+}
+
+enum StockTxnType {
+  DAMAGE
+  LOSS
+  ADJUSTMENT // balance update / correction
+  TRANSFER_OUT
+  TRANSFER_IN
+  PURCHASE
+  SALE
+}
+
+// Immutable ledger of every stock movement.
+model StockTransaction {
+  id          Int          @id @default(autoincrement())
+  entityId    Int
+  shopId      Int
+  productId   Int
+  type        StockTxnType
+  quantity    Decimal      @db.Decimal(14, 2) // signed: + increases, - decreases on-hand
+  note        String?
+  // For transfers, links the OUT and IN rows together.
+  transferId  String?
+  toShopId    Int?
+  createdById Int? // sub user id that performed it
+  createdAt   DateTime     @default(now())
+
+  entity  Entity  @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  shop    Shop    @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([entityId])
+  @@index([shopId])
+  @@index([productId])
+  @@index([transferId])
+  @@map("stock_transactions")
+}
+
+// ──────────────────── Customer / Supplier ────────────────────────
+
+model Customer {
+  id        Int      @id @default(autoincrement())
+  entityId  Int
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  sales  Sale[]
+
+  @@index([entityId])
+  @@map("customers")
+}
+
+model Supplier {
+  id        Int      @id @default(autoincrement())
+  entityId  Int
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entity    Entity     @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  purchases Purchase[]
+
+  @@index([entityId])
+  @@map("suppliers")
+}
+
+// ─────────────────────── Sales & Purchases ───────────────────────
+
+model Sale {
+  id          Int      @id @default(autoincrement())
+  entityId    Int
+  shopId      Int
+  customerId  Int?
+  invoiceNo   String
+  total       Decimal  @default(0) @db.Decimal(14, 2)
+  note        String?
+  soldAt      DateTime @default(now())
+  createdById Int?
+  createdAt   DateTime @default(now())
+
+  entity   Entity     @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  shop     Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  customer Customer?  @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items    SaleItem[]
+
+  @@unique([entityId, invoiceNo])
+  @@index([entityId])
+  @@index([shopId])
+  @@index([soldAt])
+  @@map("sales")
+}
+
+model SaleItem {
+  id        Int     @id @default(autoincrement())
+  saleId    Int
+  productId Int
+  quantity  Decimal @db.Decimal(14, 2)
+  unitPrice Decimal @db.Decimal(14, 2)
+  lineTotal Decimal @db.Decimal(14, 2)
+
+  sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([saleId])
+  @@index([productId])
+  @@map("sale_items")
+}
+
+model Purchase {
+  id          Int      @id @default(autoincrement())
+  entityId    Int
+  shopId      Int
+  supplierId  Int?
+  refNo       String
+  total       Decimal  @default(0) @db.Decimal(14, 2)
+  note        String?
+  purchasedAt DateTime @default(now())
+  createdById Int?
+  createdAt   DateTime @default(now())
+
+  entity   Entity         @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  shop     Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  supplier Supplier?      @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  items    PurchaseItem[]
+
+  @@unique([entityId, refNo])
+  @@index([entityId])
+  @@index([shopId])
+  @@index([purchasedAt])
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id         Int     @id @default(autoincrement())
+  purchaseId Int
+  productId  Int
+  quantity   Decimal @db.Decimal(14, 2)
+  unitPrice  Decimal @db.Decimal(14, 2)
+  lineTotal  Decimal @db.Decimal(14, 2)
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([purchaseId])
+  @@index([productId])
+  @@map("purchase_items")
+}
+
+// ─────────────────────────── Settings ────────────────────────────
+
+model Unit {
+  id        Int      @id @default(autoincrement())
+  entityId  Int
+  name      String // e.g. kg, piece, bag
+  shortName String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entity   Entity    @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@unique([entityId, name])
+  @@index([entityId])
+  @@map("units")
+}
+
+model Bank {
+  id            Int      @id @default(autoincrement())
+  entityId      Int
+  name          String
+  accountName   String?
+  accountNumber String?
+  branch        String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@index([entityId])
+  @@map("banks")
+}

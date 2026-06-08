@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: junkshop_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-junkshop}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-junkshop}
+      POSTGRES_DB: ${POSTGRES_DB:-junkshop}
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-junkshop} -d ${POSTGRES_DB:-junkshop}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: junkshop_api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-junkshop}:${POSTGRES_PASSWORD:-junkshop}@db:5432/${POSTGRES_DB:-junkshop}?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-change_me_access_secret}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-change_me_refresh_secret}
+      JWT_ACCESS_EXPIRES: ${JWT_ACCESS_EXPIRES:-15m}
+      JWT_REFRESH_EXPIRES: ${JWT_REFRESH_EXPIRES:-7d}
+      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-admin@junkshop.local}
+      SUPER_ADMIN_PHONE: ${SUPER_ADMIN_PHONE:-0900000000}
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-Admin@12345}
+    ports:
+      - "4000:4000"
+    # On boot: apply migrations, seed the super admin, then start the server.
+    command: sh -c "npx prisma migrate deploy && node dist/seed.js && node dist/index.js"
+
+volumes:
+  pgdata:
