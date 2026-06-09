@@ -90,3 +90,50 @@ export async function createPurchase(input: CreatePurchaseInput) {
     return purchase;
   });
 }
+
+/** Delete a purchase and reverse stock that was added when it was recorded. */
+export async function deletePurchase(
+  entityId: number,
+  purchaseId: number,
+  createdById?: number,
+) {
+  return prisma.$transaction(async (tx) => {
+    const purchase = await tx.purchase.findFirst({
+      where: { id: purchaseId, entityId },
+      include: { items: true },
+    });
+    if (!purchase) throw ApiError.notFound('Purchase not found');
+
+    for (const item of purchase.items) {
+      const stock = await tx.stock.findUnique({
+        where: { shopId_productId: { shopId: purchase.shopId, productId: item.productId } },
+      });
+      const current = stock ? new Prisma.Decimal(stock.quantity) : new Prisma.Decimal(0);
+      const next = current.sub(item.quantity);
+      if (next.lessThan(0)) {
+        throw ApiError.badRequest(
+          'Cannot delete purchase: stock was already used or sold for one or more items',
+        );
+      }
+
+      if (stock) {
+        await tx.stock.update({ where: { id: stock.id }, data: { quantity: next } });
+      }
+
+      await tx.stockTransaction.create({
+        data: {
+          entityId,
+          shopId: purchase.shopId,
+          productId: item.productId,
+          type: 'ADJUSTMENT',
+          quantity: new Prisma.Decimal(item.quantity).negated(),
+          note: `Deleted purchase ${purchase.refNo}`,
+          createdById,
+        },
+      });
+    }
+
+    await tx.purchase.delete({ where: { id: purchaseId } });
+    return { id: purchaseId };
+  });
+}

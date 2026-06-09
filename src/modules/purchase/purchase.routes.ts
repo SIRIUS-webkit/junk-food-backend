@@ -42,4 +42,11 @@ router.post(
   asyncHandler(ctrl.create),
 );
 
+router.delete(
+  '/:id',
+  requirePermission(PERMISSIONS.PURCHASE_MANAGE),
+  validate(idParam),
+  asyncHandler(ctrl.remove),
+);
+
 export default router;

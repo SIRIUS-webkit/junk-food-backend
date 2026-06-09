@@ -71,7 +71,10 @@ export async function create(req: Request, res: Response) {
         phone: phone1,
       },
     });
-    return { entity, mainUser: { id: mainUser.id, username: mainUser.username, isMain: true } };
+    return {
+      entity,
+      mainUser: { id: mainUser.id, username: mainUser.username, isMain: true },
+    };
   });
 
   return created(res, result);

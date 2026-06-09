@@ -4,7 +4,7 @@ import { ApiError } from '../../utils/ApiError';
 import { created, ok, paginated } from '../../utils/response';
 import { getPageParams } from '../../utils/pagination';
 import { resolveEntityId } from '../../utils/scope';
-import { createPurchase } from './purchase.service';
+import { createPurchase, deletePurchase } from './purchase.service';
 
 export async function list(req: Request, res: Response) {
   const entityId = resolveEntityId(req);
@@ -80,4 +80,11 @@ export async function create(req: Request, res: Response) {
   const createdById = req.user?.actor === 'SUB_USER' ? req.user.id : undefined;
   const purchase = await createPurchase({ ...req.body, entityId, createdById });
   return created(res, purchase, 'Purchase recorded');
+}
+
+export async function remove(req: Request, res: Response) {
+  const entityId = resolveEntityId(req);
+  const createdById = req.user?.actor === 'SUB_USER' ? req.user.id : undefined;
+  const result = await deletePurchase(entityId, Number(req.params.id), createdById);
+  return ok(res, result, 'Purchase deleted');
 }
