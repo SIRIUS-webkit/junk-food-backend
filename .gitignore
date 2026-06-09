@@ -2,6 +2,10 @@ node_modules/
 dist/
 .env
 .env.local
+.env.staging
+.env.production
+!.env.example
+!.env.*.example
 *.log
 npm-debug.log*
 coverage/

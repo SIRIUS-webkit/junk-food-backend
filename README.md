@@ -49,13 +49,20 @@ See `.env.example`. Key ones:
 
 | Var | Purpose |
 |-----|---------|
-| `DATABASE_URL` | Postgres connection string |
-| `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | token signing secrets |
+| `APP_ENV` | `local` \| `staging` \| `production` — selects `.env.{APP_ENV}` file |
+| `DATABASE_URL` | Postgres (pooler URL on Render/Supabase) |
+| `DIRECT_URL` | Direct Postgres URL for Prisma migrations |
+| `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | token signing secrets (**required** in production) |
 | `JWT_ACCESS_EXPIRES` / `JWT_REFRESH_EXPIRES` | token lifetimes (default 15m / 7d) |
 | `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PHONE` / `SUPER_ADMIN_PASSWORD` | seeded super admin |
+| `SEED_DEMO_ENTITY` | `false` to skip demo KBB entity on seed (default `true`) |
 
 Default seeded super admin: `admin@junkshop.local` / `Admin@12345`.
-The seed also creates a demo entity **Ko Bar Bu** (`code: KBB`) with **Shop 1**, **Shop 2**, and a main user `admin` / `Admin@12345`.
+The seed also creates a demo entity **Ko Bar Bu** (`code: KBB`) with **Shop 1**, **Shop 2**, and a main user `admin` / `Admin@12345` (unless `SEED_DEMO_ENTITY=false`).
+
+### Deploy (local / staging / production)
+
+See **[docs/ENVIRONMENTS.md](docs/ENVIRONMENTS.md)** — three environments, Render + Supabase, tag-based production releases.
 
 ---
 

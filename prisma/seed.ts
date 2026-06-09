@@ -23,8 +23,9 @@ async function main() {
   console.log(`✅ Super admin ready: ${admin.email} (password from SUPER_ADMIN_PASSWORD)`);
 
   // Optional demo entity ("Ko Bar Bu" example from the spec) — only if absent.
+  const seedDemo = process.env.SEED_DEMO_ENTITY !== 'false';
   const existing = await prisma.entity.findUnique({ where: { code: 'KBB' } });
-  if (!existing) {
+  if (seedDemo && !existing) {
     const entity = await prisma.entity.create({
       data: {
         code: 'KBB',

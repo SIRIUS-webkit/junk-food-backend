@@ -1,0 +1,23 @@
+name: Deploy Production
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  deploy-production:
+    name: Deploy to Render (production)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render production deploy hook
+        env:
+          DEPLOY_HOOK: ${{ secrets.RENDER_PROD_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$DEPLOY_HOOK" ]; then
+            echo "RENDER_PROD_DEPLOY_HOOK secret is not set."
+            echo "Add it in GitHub repo Settings → Secrets → Actions."
+            exit 1
+          fi
+          curl -fsS -X POST "$DEPLOY_HOOK"
+          echo "Production deploy triggered for tag ${GITHUB_REF_NAME}"

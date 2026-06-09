@@ -10,7 +10,9 @@ async function main() {
 
   const server = app.listen(env.port, () => {
     // eslint-disable-next-line no-console
-    console.log(`🟢 JunkShop API listening on http://localhost:${env.port} (${env.nodeEnv})`);
+    console.log(
+      `🟢 JunkShop API [${env.appEnv}] listening on port ${env.port} (${env.nodeEnv})`,
+    );
   });
 
   const shutdown = async (signal: string) => {

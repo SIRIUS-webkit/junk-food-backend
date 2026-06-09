@@ -1,0 +1,79 @@
+# Render Blueprint — staging + production
+# Docs: docs/ENVIRONMENTS.md
+
+services:
+  # Staging — auto-deploys on every push to main
+  - type: web
+    name: junkshop-api-staging
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    autoDeploy: true
+    buildCommand: npm run render:build
+    releaseCommand: npm run render:release
+    startCommand: npm run render:start
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: APP_ENV
+        value: staging
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_EXPIRES
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES
+        value: 7d
+      - key: SUPER_ADMIN_EMAIL
+        sync: false
+      - key: SUPER_ADMIN_PHONE
+        sync: false
+      - key: SUPER_ADMIN_PASSWORD
+        sync: false
+      - key: SEED_DEMO_ENTITY
+        value: "true"
+
+  # Production — deploy only via git tag (GitHub Action + deploy hook)
+  - type: web
+    name: junkshop-api-prod
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    autoDeploy: false
+    buildCommand: npm run render:build
+    releaseCommand: npm run render:release
+    startCommand: npm run render:start
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_EXPIRES
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES
+        value: 7d
+      - key: SUPER_ADMIN_EMAIL
+        sync: false
+      - key: SUPER_ADMIN_PHONE
+        sync: false
+      - key: SUPER_ADMIN_PASSWORD
+        sync: false
+      - key: SEED_DEMO_ENTITY
+        value: "false"

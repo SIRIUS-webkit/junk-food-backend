@@ -15,7 +15,14 @@ import settingRoutes from '../modules/setting/setting.routes';
 
 const router = Router();
 
-router.get('/health', (_req, res) => res.json({ success: true, status: 'ok', ts: new Date().toISOString() }));
+router.get('/health', (_req, res) =>
+  res.json({
+    success: true,
+    status: 'ok',
+    env: process.env.APP_ENV ?? 'local',
+    ts: new Date().toISOString(),
+  }),
+);
 
 router.use('/auth', authRoutes);
 router.use('/entities', entityRoutes); // super admin: CRUD entity + main user

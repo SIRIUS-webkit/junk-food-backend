@@ -4,7 +4,7 @@
   "description": "JunkShop backend - Node.js + Express + TypeScript + Prisma + PostgreSQL",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "dev": "APP_ENV=local ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.seed.json",
     "start": "node dist/index.js",
     "postinstall": "prisma generate",
@@ -15,7 +15,10 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
     "seed": "ts-node prisma/seed.ts",
-    "seed:prod": "node dist/seed.js"
+    "seed:prod": "node dist/seed.js",
+    "render:build": "npm ci && npx prisma generate && npm run build",
+    "render:release": "npx prisma migrate deploy && node dist/seed.js",
+    "render:start": "node dist/index.js"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
