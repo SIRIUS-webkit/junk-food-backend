@@ -1,8 +1,11 @@
 import { createApp } from './app';
 import { env } from './config/env';
+import { bootstrapDatabase } from './lib/bootstrapDb';
 import { prisma } from './lib/prisma';
 
 async function main() {
+  bootstrapDatabase();
+
   const app = createApp();
 
   // Verify DB connectivity before accepting traffic.

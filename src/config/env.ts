@@ -46,6 +46,13 @@ const nodeEnv = process.env.NODE_ENV ?? (appEnv === 'local' ? 'development' : 'p
 const isProd = nodeEnv === 'production';
 const isDeployed = appEnv === 'staging' || appEnv === 'production';
 
+if (isDeployed && !process.env.DIRECT_URL?.trim()) {
+  throw new Error(
+    'DIRECT_URL is required when APP_ENV is staging or production. ' +
+      'Use the Supabase direct connection string (port 5432).',
+  );
+}
+
 export const env = {
   appEnv,
   nodeEnv,

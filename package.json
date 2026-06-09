@@ -19,7 +19,7 @@
     "seed:prod": "node dist/seed.js",
     "render:build": "npm ci && npx prisma generate && npm run build",
     "render:release": "npx prisma migrate deploy && node dist/seed.js",
-    "render:start": "npx prisma migrate deploy && node dist/seed.js && node dist/index.js"
+    "render:start": "node dist/index.js"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
@@ -33,6 +33,7 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
+    "prisma": "^5.22.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -45,7 +46,6 @@
     "@typescript-eslint/eslint-plugin": "^7.18.0",
     "@typescript-eslint/parser": "^7.18.0",
     "eslint": "^8.57.0",
-    "prisma": "^5.22.0",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.6.2"

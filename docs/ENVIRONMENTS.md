@@ -185,12 +185,30 @@ npm run seed
 
 Check Supabase **Table Editor** for `entities`, `super_admins`, etc.
 
-**Option B — Render redeploy:**
+**Option B — Render redeploy (after latest code):**
 
-1. **Start Command** = `npm run render:start` (runs migrate + seed + server).
-2. **Release Command** = `npm run render:release` (optional, same migrate step).
-3. Confirm `DIRECT_URL` (5432) and `DATABASE_URL` (6543 pooler) on the service.
-4. **Manual Deploy** → logs should show migrations applying and `Super admin ready`.
+The API now runs **migrate + seed automatically on boot** when `APP_ENV` is `staging` or `production`.
+
+1. **Required on Render** (both must be set):
+
+   | Variable | Supabase source |
+   |----------|-----------------|
+   | `DATABASE_URL` | Pooler, port **6543**, append `?pgbouncer=true` |
+   | `DIRECT_URL` | Direct, port **5432** |
+
+   If `DIRECT_URL` is missing, the service will **fail to start** with a clear error.
+
+2. **Start Command:** `npm run render:start` or `node dist/index.js` (both work now).
+
+3. **Manual Deploy** → logs must show **before** "listening":
+   ```
+   📦 Applying database migrations...
+   🌱 Running database seed...
+   ✅ Database bootstrap complete
+   🟢 JunkShop API [production] listening...
+   ```
+
+4. If migrate fails in logs, fix `DIRECT_URL` / password and redeploy.
 
 ---
 
