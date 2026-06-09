@@ -163,8 +163,34 @@ Real secrets live in `.env.local` / Render dashboard — **never commit them**.
 | Staging didn't deploy | Render staging service → Events; confirm auto-deploy on `main` |
 | Prod didn't deploy | GitHub Actions log; `RENDER_PROD_DEPLOY_HOOK` secret set? |
 | Wrong database | `curl .../health` → check `env` field; verify `DATABASE_URL` on that Render service |
+| **`entities` table missing (P2021)** | Migrations never ran — see fix below |
 | Local Prisma error | Add `DIRECT_URL` same as `DATABASE_URL` for local Postgres |
 | App hits wrong API | Check which `npm start:*` script you used; login screen shows API URL |
+
+### Fix: `The table public.entities does not exist` (P2021)
+
+Migrations were not applied to Supabase.
+
+**Option A — from your laptop (fastest):**
+
+```bash
+cd junk-shop-backend
+# Set in shell or .env.staging:
+# DATABASE_URL=<Supabase pooler URL ?pgbouncer=true>
+# DIRECT_URL=<Supabase direct URL port 5432>
+npm run build
+npx prisma migrate deploy
+npm run seed
+```
+
+Check Supabase **Table Editor** for `entities`, `super_admins`, etc.
+
+**Option B — Render redeploy:**
+
+1. **Start Command** = `npm run render:start` (runs migrate + seed + server).
+2. **Release Command** = `npm run render:release` (optional, same migrate step).
+3. Confirm `DIRECT_URL` (5432) and `DATABASE_URL` (6543 pooler) on the service.
+4. **Manual Deploy** → logs should show migrations applying and `Super admin ready`.
 
 ---
 

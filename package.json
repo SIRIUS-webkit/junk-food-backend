@@ -13,12 +13,13 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
+    "db:deploy": "prisma migrate deploy && npm run seed",
     "prisma:studio": "prisma studio",
     "seed": "ts-node prisma/seed.ts",
     "seed:prod": "node dist/seed.js",
     "render:build": "npm ci && npx prisma generate && npm run build",
     "render:release": "npx prisma migrate deploy && node dist/seed.js",
-    "render:start": "node dist/index.js"
+    "render:start": "npx prisma migrate deploy && node dist/seed.js && node dist/index.js"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
