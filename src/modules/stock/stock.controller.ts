@@ -1,9 +1,66 @@
 import { Request, Response } from 'express';
+import { Prisma, StockTxnType } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { ok, paginated, created } from '../../utils/response';
 import { getPageParams } from '../../utils/pagination';
 import { resolveEntityId } from '../../utils/scope';
 import * as service from './stock.service';
+
+const productWithCategory = Prisma.validator<Prisma.ProductDefaultArgs>()({
+  include: {
+    category: {
+      select: {
+        id: true,
+        name: true,
+        pricingType: true,
+        unit: true,
+        parentId: true,
+        isGroup: true,
+      } as Prisma.CategorySelect,
+    },
+  },
+});
+
+type StockRowWithCategory = {
+  product: {
+    category: {
+      parentId?: number | null;
+      parent?: { id: number; name: string } | null;
+    } | null;
+  };
+};
+
+/** Attach parent category names for stock rows (avoids nested include typing issues). */
+async function enrichStockParents<T extends StockRowWithCategory>(rows: T[]): Promise<T[]> {
+  const parentIds = [
+    ...new Set(
+      rows
+        .map((r) => r.product.category?.parentId ?? null)
+        .filter((id): id is number => id != null),
+    ),
+  ];
+  if (!parentIds.length) return rows;
+
+  const parents = await prisma.category.findMany({
+    where: { id: { in: parentIds } },
+    select: { id: true, name: true },
+  });
+  const byId = new Map(parents.map((p) => [p.id, p]));
+
+  return rows.map((row) => {
+    const cat = row.product.category;
+    if (!cat?.parentId) return row;
+    const parent = byId.get(cat.parentId);
+    if (!parent) return row;
+    return {
+      ...row,
+      product: {
+        ...row.product,
+        category: { ...cat, parent },
+      },
+    };
+  });
+}
 
 function actorId(req: Request): number | undefined {
   return req.user?.actor === 'SUB_USER' ? req.user.id : undefined;
@@ -24,12 +81,13 @@ export async function listBalances(req: Request, res: Response) {
       orderBy: { updatedAt: 'desc' },
       include: {
         shop: { select: { id: true, name: true } },
-        product: { select: { id: true, name: true, code: true } },
+        product: productWithCategory,
       },
     }),
     prisma.stock.count({ where }),
   ]);
-  return paginated(res, items, total, page, pageSize);
+  const enriched = await enrichStockParents(items as Array<typeof items[number] & StockRowWithCategory>);
+  return paginated(res, enriched, total, page, pageSize);
 }
 
 // GET /stock/transactions  — movement ledger
@@ -38,12 +96,12 @@ export async function listTransactions(req: Request, res: Response) {
   const { skip, take, page, pageSize } = getPageParams(req);
   const shopId = req.query.shopId ? Number(req.query.shopId) : undefined;
   const productId = req.query.productId ? Number(req.query.productId) : undefined;
-  const type = req.query.type as string | undefined;
+  const type = req.query.type as StockTxnType | undefined;
   const where = {
     entityId,
     ...(shopId ? { shopId } : {}),
     ...(productId ? { productId } : {}),
-    ...(type ? { type: type as any } : {}),
+    ...(type ? { type } : {}),
   };
   const [items, total] = await Promise.all([
     prisma.stockTransaction.findMany({
@@ -53,12 +111,13 @@ export async function listTransactions(req: Request, res: Response) {
       orderBy: { createdAt: 'desc' },
       include: {
         shop: { select: { id: true, name: true } },
-        product: { select: { id: true, name: true, code: true } },
+        product: productWithCategory,
       },
     }),
     prisma.stockTransaction.count({ where }),
   ]);
-  return paginated(res, items, total, page, pageSize);
+  const enriched = await enrichStockParents(items as Array<typeof items[number] & StockRowWithCategory>);
+  return paginated(res, enriched, total, page, pageSize);
 }
 
 // POST /stock/damage  and  /stock/loss

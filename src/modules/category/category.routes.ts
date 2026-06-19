@@ -23,6 +23,8 @@ router.post(
       body: z.object({
         name: z.string().min(1),
         description: z.string().nullish(),
+        parentId: z.number().int().positive().nullish(),
+        isGroup: z.boolean().optional(),
         pricingType: z.enum(['weight', 'quantity']).optional(),
         pricePerUnit: z.number().nonnegative().optional(),
         unit: z.string().min(1).optional(),

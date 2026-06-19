@@ -129,9 +129,12 @@ model UserPermission {
 model Category {
   id           Int      @id @default(autoincrement())
   entityId     Int
+  parentId     Int?     @map("parent_id")
+  // Group nodes (e.g. "Bottle") hold sub-categories; leaf nodes are purchasable items.
+  isGroup      Boolean  @default(false) @map("is_group")
   name         String
   description  String?
-  // POS scrap-buying fields (used by scrap-pos-app)
+  // POS scrap-buying fields (used by scrap-pos-app; only on leaf categories)
   pricingType  String   @default("weight") @map("pricing_type")
   pricePerUnit Decimal  @default(0) @map("price_per_unit") @db.Decimal(14, 2)
   unit         String   @default("kg")
@@ -139,11 +142,13 @@ model Category {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  entity   Entity    @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  entity   Entity     @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children Category[] @relation("CategoryTree")
   products Product[]
 
-  @@unique([entityId, name])
   @@index([entityId])
+  @@index([entityId, parentId])
   @@map("categories")
 }
 
