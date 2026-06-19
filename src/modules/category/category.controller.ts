@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { ApiError } from '../../utils/ApiError';
 import { created, ok, paginated } from '../../utils/response';
@@ -15,9 +16,57 @@ function slugCode(name: string) {
 }
 
 const categoryInclude = {
-  parent: { select: { id: true, name: true, isGroup: true } },
-  _count: { select: { products: true, children: true } },
-} as const;
+  parent: {
+    select: {
+      id: true,
+      name: true,
+      isGroup: true,
+    } as Prisma.CategorySelect,
+  },
+  _count: {
+    select: {
+      products: true,
+      children: true,
+    } as Prisma.CategoryCountOutputTypeSelect,
+  },
+} as Prisma.CategoryInclude;
+
+const groupTreeInclude = {
+  children: {
+    where: { isActive: true },
+    orderBy: { name: 'asc' as const },
+    include: categoryInclude,
+  },
+  _count: {
+    select: { children: true } as Prisma.CategoryCountOutputTypeSelect,
+  },
+} as Prisma.CategoryInclude;
+
+/** Category row shape including hierarchy fields (stable when IDE Prisma types lag schema). */
+type CategoryHierarchyRow = {
+  id: number;
+  entityId: number;
+  parentId: number | null;
+  isGroup: boolean;
+  name: string;
+  description: string | null;
+  pricingType: string;
+  pricePerUnit: Prisma.Decimal;
+  unit: string;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+type CategoryWithChildrenCount = CategoryHierarchyRow & {
+  _count: { children: number };
+};
+
+const groupWhere = (entityId: number): Prisma.CategoryWhereInput =>
+  ({ entityId, isGroup: true, parentId: null }) as Prisma.CategoryWhereInput;
+
+const standaloneWhere = (entityId: number): Prisma.CategoryWhereInput =>
+  ({ entityId, isGroup: false, parentId: null }) as Prisma.CategoryWhereInput;
 
 async function assertUniqueName(
   entityId: number,
@@ -31,7 +80,7 @@ async function assertUniqueName(
       name: { equals: name.trim(), mode: 'insensitive' },
       parentId: parentId ?? null,
       ...(excludeId ? { id: { not: excludeId } } : {}),
-    },
+    } as Prisma.CategoryWhereInput,
   });
   if (existing) {
     throw ApiError.badRequest('A category with this name already exists at this level');
@@ -72,23 +121,18 @@ export async function list(req: Request, res: Response) {
   const leafOnly = req.query.leafOnly === 'true';
 
   if (tree) {
-    const groups = await prisma.category.findMany({
-      where: { entityId, isGroup: true, parentId: null },
-      orderBy: { name: 'asc' },
-      include: {
-        children: {
-          where: { isActive: true },
-          orderBy: { name: 'asc' },
-          include: categoryInclude,
-        },
-        _count: { select: { children: true } },
-      },
-    });
-  const standalone = await prisma.category.findMany({
-      where: { entityId, isGroup: false, parentId: null },
-      orderBy: { name: 'asc' },
-      include: categoryInclude,
-    });
+    const [groups, standalone] = await Promise.all([
+      prisma.category.findMany({
+        where: groupWhere(entityId),
+        orderBy: { name: 'asc' },
+        include: groupTreeInclude,
+      }),
+      prisma.category.findMany({
+        where: standaloneWhere(entityId),
+        orderBy: { name: 'asc' },
+        include: categoryInclude,
+      }),
+    ]);
     return ok(res, { groups, standalone });
   }
 
@@ -105,13 +149,14 @@ export async function list(req: Request, res: Response) {
     ...(leafOnly ? { isGroup: false } : {}),
     ...(parentId !== undefined ? { parentId } : {}),
     ...(search ? { name: { contains: search, mode: 'insensitive' as const } } : {}),
-  };
+  } as Prisma.CategoryWhereInput;
+
   const [items, total] = await Promise.all([
     prisma.category.findMany({
       where,
       skip,
       take,
-      orderBy: [{ parentId: 'asc' }, { name: 'asc' }],
+      orderBy: [{ parentId: 'asc' }, { name: 'asc' }] as Prisma.CategoryOrderByWithRelationInput[],
       include: categoryInclude,
     }),
     prisma.category.count({ where }),
@@ -126,7 +171,7 @@ export async function getOne(req: Request, res: Response) {
     include: {
       ...categoryInclude,
       children: { orderBy: { name: 'asc' }, include: categoryInclude },
-    },
+    } as Prisma.CategoryInclude,
   });
   if (!category) throw ApiError.notFound('Category not found');
   return ok(res, category);
@@ -140,22 +185,23 @@ export async function create(req: Request, res: Response) {
 
   if (parentId) {
     const parent = await prisma.category.findFirst({
-      where: { id: Number(parentId), entityId, isGroup: true },
+      where: {
+        id: Number(parentId),
+        entityId,
+        isGroup: true,
+      } as Prisma.CategoryWhereInput,
     });
     if (!parent) throw ApiError.badRequest('Parent group category not found');
   }
   if (group && parentId) {
     throw ApiError.badRequest('Group categories cannot have a parent');
   }
-  if (!group && !parentId && pricingType === undefined && pricePerUnit === undefined) {
-    // allow legacy flat leaf create
-  }
 
   await assertUniqueName(entityId, trimmedName, parentId ?? null);
 
   const pt = pricingType ?? 'weight';
   const price = pricePerUnit ?? 0;
-  const u = unit ?? (pt === 'weight' ? 'kg' : 'piece');
+  const u = unit ?? (pt === 'weight' ? 'viss' : 'piece');
 
   if (!group && (pricePerUnit === undefined || Number(pricePerUnit) <= 0)) {
     throw ApiError.badRequest('Price per unit is required for item categories');
@@ -171,8 +217,8 @@ export async function create(req: Request, res: Response) {
         description,
         pricingType: group ? 'weight' : pt,
         pricePerUnit: group ? 0 : price,
-        unit: group ? 'kg' : u,
-      },
+        unit: group ? 'viss' : u,
+      } as Prisma.CategoryUncheckedCreateInput,
     });
 
     if (group) {
@@ -189,12 +235,14 @@ export async function create(req: Request, res: Response) {
 export async function update(req: Request, res: Response) {
   const entityId = resolveEntityId(req);
   const id = Number(req.params.id);
-  const existing = await prisma.category.findFirst({ where: { id, entityId } });
+  const existing = (await prisma.category.findFirst({
+    where: { id, entityId },
+  })) as CategoryHierarchyRow | null;
   if (!existing) throw ApiError.notFound('Category not found');
   const { name, description, isActive, pricingType, pricePerUnit, unit } = req.body;
 
   if (name && name.trim().toLowerCase() !== existing.name.toLowerCase()) {
-    await assertUniqueName(entityId, name, existing.parentId, id);
+    await assertUniqueName(entityId, name, existing.parentId ?? null, id);
   }
 
   if (existing.isGroup && (pricingType || pricePerUnit !== undefined || unit)) {
@@ -238,10 +286,12 @@ export async function update(req: Request, res: Response) {
 export async function remove(req: Request, res: Response) {
   const entityId = resolveEntityId(req);
   const id = Number(req.params.id);
-  const existing = await prisma.category.findFirst({
+  const existing = (await prisma.category.findFirst({
     where: { id, entityId },
-    include: { _count: { select: { children: true } } },
-  });
+    include: {
+      _count: { select: { children: true } as Prisma.CategoryCountOutputTypeSelect },
+    } as Prisma.CategoryInclude,
+  })) as CategoryWithChildrenCount | null;
   if (!existing) throw ApiError.notFound('Category not found');
   if (existing._count.children > 0) {
     throw ApiError.badRequest('Cannot delete a group that still has sub-categories');

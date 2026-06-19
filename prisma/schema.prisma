@@ -137,7 +137,7 @@ model Category {
   // POS scrap-buying fields (used by scrap-pos-app; only on leaf categories)
   pricingType  String   @default("weight") @map("pricing_type")
   pricePerUnit Decimal  @default(0) @map("price_per_unit") @db.Decimal(14, 2)
-  unit         String   @default("kg")
+  unit         String   @default("viss")
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
