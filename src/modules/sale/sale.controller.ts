@@ -1,10 +1,42 @@
 import { Request, Response } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
+import { categoryWithParentRefSelect, enrichPurchaseCategoryParents } from '../../lib/categoryParents';
 import { ApiError } from '../../utils/ApiError';
 import { created, ok, paginated } from '../../utils/response';
 import { getPageParams } from '../../utils/pagination';
 import { resolveEntityId } from '../../utils/scope';
 import { createSale } from './sale.service';
+
+const saleProductSelect = {
+  id: true,
+  name: true,
+  code: true,
+  categoryId: true,
+  salePrice: true,
+  category: { select: categoryWithParentRefSelect },
+} satisfies Prisma.ProductSelect;
+
+const saleInclude = {
+  customer: { select: { id: true, name: true, phone: true, address: true } },
+  shop: { select: { id: true, name: true } },
+  items: {
+    include: {
+      product: { select: saleProductSelect },
+    },
+  },
+  _count: { select: { items: true } },
+} satisfies Prisma.SaleInclude;
+
+const saleDetailInclude = {
+  customer: true,
+  shop: { select: { id: true, name: true } },
+  items: {
+    include: {
+      product: { select: saleProductSelect },
+    },
+  },
+} satisfies Prisma.SaleInclude;
 
 export async function list(req: Request, res: Response) {
   const entityId = resolveEntityId(req);
@@ -23,29 +55,23 @@ export async function list(req: Request, res: Response) {
       skip,
       take,
       orderBy: { soldAt: 'desc' },
-      include: {
-        customer: { select: { id: true, name: true } },
-        shop: { select: { id: true, name: true } },
-        _count: { select: { items: true } },
-      },
+      include: saleInclude,
     }),
     prisma.sale.count({ where }),
   ]);
-  return paginated(res, items, total, page, pageSize);
+  const enriched = await enrichPurchaseCategoryParents(items);
+  return paginated(res, enriched, total, page, pageSize);
 }
 
 export async function getOne(req: Request, res: Response) {
   const entityId = resolveEntityId(req);
   const sale = await prisma.sale.findFirst({
     where: { id: Number(req.params.id), entityId },
-    include: {
-      customer: true,
-      shop: { select: { id: true, name: true } },
-      items: { include: { product: { select: { id: true, name: true, code: true } } } },
-    },
+    include: saleDetailInclude,
   });
   if (!sale) throw ApiError.notFound('Sale not found');
-  return ok(res, sale);
+  const [enriched] = await enrichPurchaseCategoryParents([sale]);
+  return ok(res, enriched);
 }
 
 export async function create(req: Request, res: Response) {

@@ -55,7 +55,9 @@ export async function createSale(input: CreateSaleInput) {
         const current = stock ? new Prisma.Decimal(stock.quantity) : new Prisma.Decimal(0);
         const next = current.sub(it.quantity);
         if (next.lessThan(0)) {
-          throw ApiError.badRequest(`Insufficient stock for product ${product.name}`);
+          throw ApiError.badRequest(
+            `Insufficient stock for product ${product.name}. Available: ${current.toString()}, requested: ${it.quantity}`,
+          );
         }
         if (stock) {
           await tx.stock.update({ where: { id: stock.id }, data: { quantity: next } });
@@ -90,7 +92,23 @@ export async function createSale(input: CreateSaleInput) {
         createdById: input.createdById,
         items: { create: itemsData },
       },
-      include: { items: true },
+      include: {
+        customer: { select: { id: true, name: true, phone: true, address: true } },
+        shop: { select: { id: true, name: true } },
+        items: {
+          include: {
+            product: {
+              select: {
+                id: true,
+                name: true,
+                code: true,
+                categoryId: true,
+                category: { select: { id: true, name: true, pricingType: true, unit: true, parentId: true } },
+              },
+            },
+          },
+        },
+      },
     });
     return sale;
   });

@@ -5,6 +5,7 @@ import { validate } from '../../middleware/validate';
 import { authenticate } from '../../middleware/auth';
 import { requirePermission } from '../../middleware/authorize';
 import { PERMISSIONS } from '../../constants/permissions';
+import type { PermissionKey } from '../../constants/permissions';
 import * as ctrl from './stock.controller';
 
 const router = Router();
@@ -17,8 +18,14 @@ const entry = z.object({
   note: z.string().nullish(),
 });
 
-router.get('/', requirePermission(PERMISSIONS.STOCK_VIEW), asyncHandler(ctrl.listBalances));
-router.get('/transactions', requirePermission(PERMISSIONS.STOCK_VIEW), asyncHandler(ctrl.listTransactions));
+const stockReadPerms = [
+  PERMISSIONS.STOCK_VIEW,
+  PERMISSIONS.SALE_VIEW,
+  PERMISSIONS.SALE_MANAGE,
+] as PermissionKey[];
+
+router.get('/', requirePermission(...stockReadPerms), asyncHandler(ctrl.listBalances));
+router.get('/transactions', requirePermission(...stockReadPerms), asyncHandler(ctrl.listTransactions));
 
 router.post('/damage', requirePermission(PERMISSIONS.STOCK_MANAGE), validate(z.object({ body: entry })), asyncHandler(ctrl.damage));
 router.post('/loss', requirePermission(PERMISSIONS.STOCK_MANAGE), validate(z.object({ body: entry })), asyncHandler(ctrl.loss));
