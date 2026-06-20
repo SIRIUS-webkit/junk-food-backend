@@ -63,18 +63,21 @@ model Entity {
 // ───────────────────────────── Shop ──────────────────────────────
 
 model Shop {
-  id          Int      @id @default(autoincrement())
-  code        String   @unique // shop code
-  entityId    Int
-  name        String
-  description String?
-  address     String?
-  phone1      String?
-  phone2      String?
+  id           Int       @id @default(autoincrement())
+  code         String    @unique // shop code
+  entityId     Int
+  name         String
+  description  String?
+  address      String?
+  phone1       String?
+  phone2       String?
   inchargeName String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  // --- offline sync ---
+  syncId       String?   @unique @map("sync_id")
+  deletedAt    DateTime? @map("deleted_at")
 
   entity    Entity             @relation(fields: [entityId], references: [id], onDelete: Cascade)
   stocks    Stock[]
@@ -89,19 +92,19 @@ model Shop {
 // ─────────────────────────── Sub User ────────────────────────────
 
 model SubUser {
-  id          Int      @id @default(autoincrement())
-  entityId    Int
-  username    String // login name, unique within an entity
-  name        String?
+  id           Int      @id @default(autoincrement())
+  entityId     Int
+  username     String // login name, unique within an entity
+  name         String?
   passwordHash String
-  description String?
-  phone       String?
-  isMain      Boolean  @default(false) // the entity's main/admin account
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  description  String?
+  phone        String?
+  isMain       Boolean  @default(false) // the entity's main/admin account
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  entity      Entity            @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  entity      Entity           @relation(fields: [entityId], references: [id], onDelete: Cascade)
   permissions UserPermission[]
 
   @@unique([entityId, username])
@@ -127,20 +130,23 @@ model UserPermission {
 // ──────────────────────── Product / Category ─────────────────────
 
 model Category {
-  id           Int      @id @default(autoincrement())
+  id           Int       @id @default(autoincrement())
   entityId     Int
-  parentId     Int?     @map("parent_id")
+  parentId     Int?      @map("parent_id")
   // Group nodes (e.g. "Bottle") hold sub-categories; leaf nodes are purchasable items.
-  isGroup      Boolean  @default(false) @map("is_group")
+  isGroup      Boolean   @default(false) @map("is_group")
   name         String
   description  String?
   // POS scrap-buying fields (used by scrap-pos-app; only on leaf categories)
-  pricingType  String   @default("weight") @map("pricing_type")
-  pricePerUnit Decimal  @default(0) @map("price_per_unit") @db.Decimal(14, 2)
-  unit         String   @default("viss")
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  pricingType  String    @default("weight") @map("pricing_type")
+  pricePerUnit Decimal   @default(0) @map("price_per_unit") @db.Decimal(14, 2)
+  unit         String    @default("viss")
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  // --- offline sync ---
+  syncId       String?   @unique @map("sync_id")
+  deletedAt    DateTime? @map("deleted_at")
 
   entity   Entity     @relation(fields: [entityId], references: [id], onDelete: Cascade)
   parent   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
@@ -153,25 +159,28 @@ model Category {
 }
 
 model Product {
-  id            Int      @id @default(autoincrement())
+  id            Int       @id @default(autoincrement())
   entityId      Int
   categoryId    Int?
   unitId        Int?
   code          String?
   name          String
   description   String?
-  purchasePrice Decimal  @default(0) @db.Decimal(14, 2)
-  salePrice     Decimal  @default(0) @db.Decimal(14, 2)
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  purchasePrice Decimal   @default(0) @db.Decimal(14, 2)
+  salePrice     Decimal   @default(0) @db.Decimal(14, 2)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  // --- offline sync ---
+  syncId        String?   @unique @map("sync_id")
+  deletedAt     DateTime? @map("deleted_at")
 
-  entity     Entity             @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  category   Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  unit       Unit?              @relation(fields: [unitId], references: [id], onDelete: SetNull)
-  stocks     Stock[]
-  stockTxns  StockTransaction[]
-  saleItems  SaleItem[]
+  entity        Entity             @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  category      Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  unit          Unit?              @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  stocks        Stock[]
+  stockTxns     StockTransaction[]
+  saleItems     SaleItem[]
   purchaseItems PurchaseItem[]
 
   @@unique([entityId, code])
@@ -240,15 +249,18 @@ model StockTransaction {
 // ──────────────────── Customer / Supplier ────────────────────────
 
 model Customer {
-  id        Int      @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
   entityId  Int
   name      String
   phone     String?
   email     String?
   address   String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  // --- offline sync ---
+  syncId    String?   @unique @map("sync_id")
+  deletedAt DateTime? @map("deleted_at")
 
   entity Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
   sales  Sale[]
@@ -258,15 +270,18 @@ model Customer {
 }
 
 model Supplier {
-  id        Int      @id @default(autoincrement())
+  id        Int       @id @default(autoincrement())
   entityId  Int
   name      String
   phone     String?
   email     String?
   address   String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  // --- offline sync ---
+  syncId    String?   @unique @map("sync_id")
+  deletedAt DateTime? @map("deleted_at")
 
   entity    Entity     @relation(fields: [entityId], references: [id], onDelete: Cascade)
   purchases Purchase[]
@@ -278,16 +293,20 @@ model Supplier {
 // ─────────────────────── Sales & Purchases ───────────────────────
 
 model Sale {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   entityId    Int
   shopId      Int
   customerId  Int?
   invoiceNo   String
-  total       Decimal  @default(0) @db.Decimal(14, 2)
+  total       Decimal   @default(0) @db.Decimal(14, 2)
   note        String?
-  soldAt      DateTime @default(now())
+  soldAt      DateTime  @default(now())
   createdById Int?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  // --- offline sync ---
+  syncId      String?   @unique @map("sync_id")
+  deletedAt   DateTime? @map("deleted_at")
 
   entity   Entity     @relation(fields: [entityId], references: [id], onDelete: Cascade)
   shop     Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
@@ -298,6 +317,7 @@ model Sale {
   @@index([entityId])
   @@index([shopId])
   @@index([soldAt])
+  @@index([entityId, updatedAt])
   @@map("sales")
 }
 
@@ -308,6 +328,7 @@ model SaleItem {
   quantity  Decimal @db.Decimal(14, 2)
   unitPrice Decimal @db.Decimal(14, 2)
   lineTotal Decimal @db.Decimal(14, 2)
+  syncId    String? @unique @map("sync_id")
 
   sale    Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
   product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
@@ -318,16 +339,20 @@ model SaleItem {
 }
 
 model Purchase {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   entityId    Int
   shopId      Int
   supplierId  Int?
   refNo       String
-  total       Decimal  @default(0) @db.Decimal(14, 2)
+  total       Decimal   @default(0) @db.Decimal(14, 2)
   note        String?
-  purchasedAt DateTime @default(now())
+  purchasedAt DateTime  @default(now())
   createdById Int?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  // --- offline sync ---
+  syncId      String?   @unique @map("sync_id")
+  deletedAt   DateTime? @map("deleted_at")
 
   entity   Entity         @relation(fields: [entityId], references: [id], onDelete: Cascade)
   shop     Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
@@ -338,6 +363,7 @@ model Purchase {
   @@index([entityId])
   @@index([shopId])
   @@index([purchasedAt])
+  @@index([entityId, updatedAt])
   @@map("purchases")
 }
 
@@ -348,6 +374,7 @@ model PurchaseItem {
   quantity   Decimal @db.Decimal(14, 2)
   unitPrice  Decimal @db.Decimal(14, 2)
   lineTotal  Decimal @db.Decimal(14, 2)
+  syncId     String? @unique @map("sync_id")
 
   purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   product  Product  @relation(fields: [productId], references: [id], onDelete: Restrict)

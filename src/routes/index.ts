@@ -12,6 +12,7 @@ import saleRoutes from '../modules/sale/sale.routes';
 import purchaseRoutes from '../modules/purchase/purchase.routes';
 import reportRoutes from '../modules/report/report.routes';
 import settingRoutes from '../modules/setting/setting.routes';
+import syncRoutes from '../modules/sync/sync.routes';
 
 const router = Router();
 
@@ -37,5 +38,6 @@ router.use('/sales', saleRoutes);
 router.use('/purchases', purchaseRoutes);
 router.use('/reports', reportRoutes);
 router.use('/settings', settingRoutes); // units + banks
+router.use('/sync', syncRoutes); // offline-first delta pull
 
 export default router;

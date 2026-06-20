@@ -6,6 +6,7 @@ export interface SaleItemInput {
   productId: number;
   quantity: number;
   unitPrice: number;
+  syncId?: string;
 }
 
 export interface CreateSaleInput {
@@ -18,6 +19,7 @@ export interface CreateSaleInput {
   items: SaleItemInput[];
   createdById?: number;
   deductStock?: boolean; // default true
+  syncId?: string;
 }
 
 // Create a sale, its line items, and (optionally) decrement on-hand stock,
@@ -46,6 +48,7 @@ export async function createSale(input: CreateSaleInput) {
         quantity: new Prisma.Decimal(it.quantity),
         unitPrice: new Prisma.Decimal(it.unitPrice),
         lineTotal,
+        syncId: it.syncId,
       });
 
       if (deduct) {
@@ -90,6 +93,7 @@ export async function createSale(input: CreateSaleInput) {
         soldAt: input.soldAt ? new Date(input.soldAt) : undefined,
         total,
         createdById: input.createdById,
+        syncId: input.syncId,
         items: { create: itemsData },
       },
       include: {

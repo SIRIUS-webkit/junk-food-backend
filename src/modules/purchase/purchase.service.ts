@@ -6,6 +6,7 @@ export interface PurchaseItemInput {
   productId: number;
   quantity: number;
   unitPrice: number;
+  syncId?: string;
 }
 
 export interface CreatePurchaseInput {
@@ -18,6 +19,7 @@ export interface CreatePurchaseInput {
   items: PurchaseItemInput[];
   createdById?: number;
   addStock?: boolean; // default true
+  syncId?: string;
 }
 
 // Create a purchase, its line items, and (optionally) increment on-hand stock.
@@ -45,6 +47,7 @@ export async function createPurchase(input: CreatePurchaseInput) {
         quantity: new Prisma.Decimal(it.quantity),
         unitPrice: new Prisma.Decimal(it.unitPrice),
         lineTotal,
+        syncId: it.syncId,
       });
 
       if (add) {
@@ -83,6 +86,7 @@ export async function createPurchase(input: CreatePurchaseInput) {
         purchasedAt: input.purchasedAt ? new Date(input.purchasedAt) : undefined,
         total,
         createdById: input.createdById,
+        syncId: input.syncId,
         items: { create: itemsData },
       },
       include: { items: true },
