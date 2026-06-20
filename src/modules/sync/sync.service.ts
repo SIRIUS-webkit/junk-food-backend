@@ -22,23 +22,34 @@ export interface PullResult {
  */
 export async function pullChanges(entityId: number, since?: string): Promise<PullResult> {
   const after = since ? new Date(since) : new Date(0);
-  const base = { entityId, updatedAt: { gt: after } };
-  const opts = { where: base, orderBy: { updatedAt: 'asc' as const }, take: PAGE_CAP };
+  const where = { entityId, updatedAt: { gt: after } };
+  const take = PAGE_CAP;
 
   const [shops, categories, products, customers, suppliers, purchases, sales, stock] =
     await Promise.all([
-      prisma.shop.findMany(opts),
-      prisma.category.findMany(opts),
-      prisma.product.findMany(opts),
-      prisma.customer.findMany(opts),
-      prisma.supplier.findMany(opts),
-      prisma.purchase.findMany({ ...opts, include: { items: true } }),
-      prisma.sale.findMany({ ...opts, include: { items: true } }),
-      // Stock is server-derived (pull-only); identified by server id.
+      prisma.shop.findMany({ where, orderBy: { updatedAt: 'asc' }, take }),
+      prisma.category.findMany({ where, orderBy: { updatedAt: 'asc' }, take }),
+      prisma.product.findMany({ where, orderBy: { updatedAt: 'asc' }, take }),
+      prisma.customer.findMany({ where, orderBy: { updatedAt: 'asc' }, take }),
+      prisma.supplier.findMany({ where, orderBy: { updatedAt: 'asc' }, take }),
+      prisma.purchase.findMany({
+        where,
+        orderBy: { updatedAt: 'asc' },
+        take,
+        include: { items: true },
+      }),
+      prisma.sale.findMany({
+        where,
+        orderBy: { updatedAt: 'asc' },
+        take,
+        include: { items: true },
+      }),
+      // Stock is server-derived (pull-only): always send a full snapshot so the
+      // client materialized stock_balances table stays complete offline.
       prisma.stock.findMany({
-        where: { entityId, updatedAt: { gt: after } },
-        orderBy: { updatedAt: 'asc' as const },
-        take: PAGE_CAP,
+        where: { entityId },
+        orderBy: { id: 'asc' },
+        take,
       }),
     ]);
 
