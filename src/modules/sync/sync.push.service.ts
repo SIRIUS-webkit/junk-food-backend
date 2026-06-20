@@ -83,6 +83,40 @@ async function resolveCustomerId(
   return customer.id;
 }
 
+async function resolveCategoryParentId(
+  entityId: number,
+  data: Record<string, unknown>,
+  batchIds: Map<string, number>,
+): Promise<number | null> {
+  const parentSyncId = data.parentSyncId as string | undefined;
+  if (parentSyncId) {
+    const fromBatch = batchIds.get(parentSyncId);
+    if (fromBatch != null) return fromBatch;
+    const parent = await prisma.category.findFirst({
+      where: { syncId: parentSyncId, entityId },
+      select: { id: true },
+    });
+    if (!parent) {
+      throw ApiError.badRequest(`Parent category syncId ${parentSyncId} not found`);
+    }
+    return parent.id;
+  }
+
+  if (data.parentId == null) return null;
+
+  const parentId = Number(data.parentId);
+  const parent = await prisma.category.findFirst({
+    where: { id: parentId, entityId },
+    select: { id: true },
+  });
+  if (!parent) {
+    throw ApiError.badRequest(
+      `Parent category id ${parentId} not found — sync parent group first`,
+    );
+  }
+  return parent.id;
+}
+
 async function upsertSupplier(
   entityId: number,
   syncId: string,
@@ -226,6 +260,7 @@ async function upsertCategory(
   syncId: string,
   op: SyncOp,
   data: Record<string, unknown> = {},
+  batchIds: Map<string, number>,
 ): Promise<{ id: number }> {
   const existing = await prisma.category.findFirst({ where: { syncId, entityId } });
   if (op === 'delete') {
@@ -260,11 +295,12 @@ async function upsertCategory(
   const pt = String(data.pricingType ?? 'weight');
   const price = Number(data.pricePerUnit ?? 0);
   const unit = String(data.unit ?? (pt === 'weight' ? 'viss' : 'piece'));
+  const parentId = await resolveCategoryParentId(entityId, data, batchIds);
   const category = await prisma.category.create({
     data: {
       entityId,
       syncId,
-      parentId: data.parentId != null ? Number(data.parentId) : null,
+      parentId,
       isGroup,
       name: String(data.name ?? ''),
       description: (data.description as string | null | undefined) ?? null,
@@ -389,9 +425,20 @@ const ENTITY_ORDER: SyncEntity[] = [
 ];
 
 function sortMutations(mutations: SyncMutation[]): SyncMutation[] {
-  return [...mutations].sort(
-    (a, b) => ENTITY_ORDER.indexOf(a.entity) - ENTITY_ORDER.indexOf(b.entity),
-  );
+  return [...mutations].sort((a, b) => {
+    const entityOrder =
+      ENTITY_ORDER.indexOf(a.entity) - ENTITY_ORDER.indexOf(b.entity);
+    if (entityOrder !== 0) return entityOrder;
+
+    // Parent category groups before child leaf categories in the same batch.
+    if (a.entity === 'categories' && b.entity === 'categories') {
+      const aHasParent = a.data?.parentId != null || a.data?.parentSyncId != null;
+      const bHasParent = b.data?.parentId != null || b.data?.parentSyncId != null;
+      return Number(aHasParent) - Number(bHasParent);
+    }
+
+    return 0;
+  });
 }
 
 export async function pushMutations(
@@ -401,6 +448,7 @@ export async function pushMutations(
 ): Promise<SyncPushResult[]> {
   const sorted = sortMutations(mutations);
   const results: SyncPushResult[] = [];
+  const batchIds = new Map<string, number>();
 
   for (const mutation of sorted) {
     try {
@@ -436,6 +484,7 @@ export async function pushMutations(
             mutation.syncId,
             mutation.op,
             mutation.data,
+            batchIds,
           ));
           break;
         case 'purchases':
@@ -468,6 +517,7 @@ export async function pushMutations(
         ok: true,
         serverId: serverId || undefined,
       });
+      if (serverId) batchIds.set(mutation.syncId, serverId);
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'Sync push failed';
       results.push({ syncId: mutation.syncId, ok: false, error: message });
