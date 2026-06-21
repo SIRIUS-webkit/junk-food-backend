@@ -83,6 +83,38 @@ async function resolveCustomerId(
   return customer.id;
 }
 
+async function resolveShopId(
+  entityId: number,
+  data: Record<string, unknown>,
+  batchIds: Map<string, number>,
+): Promise<number> {
+  const shopSyncId = data.shopSyncId as string | undefined;
+  if (shopSyncId) {
+    const fromBatch = batchIds.get(shopSyncId);
+    if (fromBatch != null) return fromBatch;
+    const shop = await prisma.shop.findFirst({
+      where: { syncId: shopSyncId, entityId },
+      select: { id: true },
+    });
+    if (!shop) throw ApiError.badRequest(`Shop syncId ${shopSyncId} not found`);
+    return shop.id;
+  }
+
+  if (data.shopId != null) {
+    const shopId = Number(data.shopId);
+    if (shopId > 0) {
+      const shop = await prisma.shop.findFirst({
+        where: { id: shopId, entityId },
+        select: { id: true },
+      });
+      if (shop) return shopId;
+      throw ApiError.badRequest(`Shop id ${shopId} not found for this entity`);
+    }
+  }
+
+  throw ApiError.badRequest('Purchase/sale missing shopId or shopSyncId');
+}
+
 async function resolveCategoryParentId(
   entityId: number,
   data: Record<string, unknown>,
@@ -330,12 +362,59 @@ async function upsertCategory(
   return { id: category.id };
 }
 
+/**
+ * Resolve purchase/sale line items to concrete server productIds. Items created
+ * offline reference the product by `productSyncId` (the product has no server id
+ * yet); since categories — which create their product — are pushed before
+ * purchases/sales, the product row exists by now and we look it up by syncId.
+ */
+async function resolvePushItems(
+  entityId: number,
+  rawItems: Array<Record<string, unknown>>,
+): Promise<{ productId: number; quantity: number; unitPrice: number; syncId?: string }[]> {
+  return Promise.all(
+    rawItems.map(async (it) => {
+      const productSyncId = it.productSyncId as string | undefined;
+      let productId = it.productId != null ? Number(it.productId) : null;
+
+      if (productId != null) {
+        const byId = await prisma.product.findFirst({
+          where: { id: productId, entityId },
+          select: { id: true },
+        });
+        if (!byId) productId = null;
+      }
+
+      if (productId == null) {
+        if (!productSyncId) {
+          throw ApiError.badRequest('Line item missing productId and productSyncId');
+        }
+        const product = await prisma.product.findFirst({
+          where: { syncId: productSyncId, entityId },
+          select: { id: true },
+        });
+        if (!product) {
+          throw ApiError.badRequest(`Product syncId ${productSyncId} not found — sync category first`);
+        }
+        productId = product.id;
+      }
+      return {
+        productId,
+        quantity: Number(it.quantity),
+        unitPrice: Number(it.unitPrice),
+        syncId: it.syncId as string | undefined,
+      };
+    }),
+  );
+}
+
 async function upsertPurchase(
   entityId: number,
   syncId: string,
   op: SyncOp,
   data: Record<string, unknown> = {},
   createdById?: number,
+  batchIds: Map<string, number> = new Map(),
 ): Promise<{ id: number }> {
   const existing = await prisma.purchase.findFirst({
     where: { syncId, entityId },
@@ -355,11 +434,15 @@ async function upsertPurchase(
   if (op === 'update') throw ApiError.badRequest('Purchase update via sync not supported yet');
 
   const supplierId = await resolveSupplierId(entityId, data);
-  const items = (data.items as CreatePurchaseInput['items'] | undefined) ?? [];
+  const shopId = await resolveShopId(entityId, data, batchIds);
+  const items = await resolvePushItems(
+    entityId,
+    (data.items as Array<Record<string, unknown>> | undefined) ?? [],
+  );
   const input: CreatePurchaseInput & { syncId: string } = {
     entityId,
     syncId,
-    shopId: Number(data.shopId),
+    shopId,
     supplierId: supplierId ?? null,
     refNo: String(data.refNo ?? `POS-${syncId.slice(0, 8)}`),
     note: (data.note as string | undefined) ?? undefined,
@@ -378,6 +461,7 @@ async function upsertSale(
   op: SyncOp,
   data: Record<string, unknown> = {},
   createdById?: number,
+  batchIds: Map<string, number> = new Map(),
 ): Promise<{ id: number }> {
   const existing = await prisma.sale.findFirst({
     where: { syncId, entityId },
@@ -397,11 +481,15 @@ async function upsertSale(
   if (op === 'update') throw ApiError.badRequest('Sale update via sync not supported yet');
 
   const customerId = await resolveCustomerId(entityId, data);
-  const items = (data.items as CreateSaleInput['items'] | undefined) ?? [];
+  const shopId = await resolveShopId(entityId, data, batchIds);
+  const items = await resolvePushItems(
+    entityId,
+    (data.items as Array<Record<string, unknown>> | undefined) ?? [],
+  );
   const input: CreateSaleInput & { syncId: string } = {
     entityId,
     syncId,
-    shopId: Number(data.shopId),
+    shopId,
     customerId: customerId ?? null,
     invoiceNo: String(data.invoiceNo ?? `SALE-${syncId.slice(0, 8)}`),
     note: (data.note as string | undefined) ?? undefined,
@@ -494,6 +582,7 @@ export async function pushMutations(
             mutation.op,
             mutation.data,
             createdById,
+            batchIds,
           ));
           break;
         case 'sales':
@@ -503,6 +592,7 @@ export async function pushMutations(
             mutation.op,
             mutation.data,
             createdById,
+            batchIds,
           ));
           break;
         case 'products':
