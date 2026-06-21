@@ -17,6 +17,7 @@
     "prisma:studio": "prisma studio",
     "seed": "ts-node prisma/seed.ts",
     "seed:prod": "node dist/seed.js",
+    "db:purge-business": "ts-node prisma/scripts/purge-business-data.ts",
     "render:build": "npm ci && npx prisma generate && npm run build",
     "render:release": "npx prisma migrate deploy && node dist/seed.js",
     "render:start": "node dist/index.js"
